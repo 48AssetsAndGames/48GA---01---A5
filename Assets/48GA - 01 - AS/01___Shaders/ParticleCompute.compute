@@ -1,0 +1,225 @@
+#pragma kernel CSMain
+#pragma kernel CSInit
+#pragma kernel CSExplode
+#pragma kernel CSCountDensity
+
+struct Particle
+{
+    float2 position;
+    float2 velocity;
+    float4 color;
+    float  life;
+    float  mass;
+    int    colorVariant;
+    float  pad;
+};
+
+RWStructuredBuffer<Particle> particles;
+Texture2D<float> attractorTex;
+SamplerState sampler_linear_clamp;
+
+float  deltaTime;
+float  time;
+float2 screenSize;
+float2 mousePos;
+float  mouseSpeed;
+float  attractorWeight;
+float  chaosTemperature;
+float  clickX;
+float  clickY;
+float  clickStrength;
+float  explosionRadius;
+float2 clickPos;      
+int    particleCount;
+RWStructuredBuffer<int> densityCounter;
+Texture2D<float> densityTex;
+
+
+float hash(float n)  { return frac(sin(n) * 43758.5453123); }
+
+float2 hash2(float2 p)
+{
+    p = float2(dot(p, float2(127.1, 311.7)), dot(p, float2(269.5, 183.3)));
+    return frac(sin(p) * 43758.5453123) * 2.0 - 1.0;
+}
+
+float noise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    float a = dot(hash2(i + float2(0,0)), f - float2(0,0));
+    float b = dot(hash2(i + float2(1,0)), f - float2(1,0));
+    float c = dot(hash2(i + float2(0,1)), f - float2(0,1));
+    float d = dot(hash2(i + float2(1,1)), f - float2(1,1));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float2 curlNoise(float2 p, float t)
+{
+    float scale = 0.004;
+    float2 sp = p * scale;
+    float n1 = noise(sp + float2(t * 0.3,  t * 0.2));
+    float n2 = noise(sp + float2(t * 0.2 + 5.2, -t * 0.3 + 1.3));
+    float n3 = noise(sp * 2.1 + float2(-t * 0.4 + 3.1, t * 0.15 + 7.4));
+    float n4 = noise(sp * 0.5 + float2(t * 0.1 + 1.7,  t * 0.35 + 2.9));
+    float2 curl1 = float2(n1 - 0.5, n2 - 0.5) * 2.0;
+    float2 curl2 = float2(n3 - 0.5, n4 - 0.5) * 1.2;
+    return curl1 + curl2;
+}
+
+float2 sampleAttractor(float2 worldPos)
+{
+    float2 uv = (worldPos - clickPos) / screenSize + 0.5;
+
+
+    uv = clamp(uv, 0.001, 0.999);
+
+    float eps = 1.5 / screenSize.x;
+
+    float cx = attractorTex.SampleLevel(sampler_linear_clamp, uv, 0);
+    float rx = attractorTex.SampleLevel(sampler_linear_clamp, uv + float2( eps, 0),   0);
+    float lx = attractorTex.SampleLevel(sampler_linear_clamp, uv + float2(-eps, 0),   0);
+    float uy = attractorTex.SampleLevel(sampler_linear_clamp, uv + float2(0,  eps),   0);
+    float dy = attractorTex.SampleLevel(sampler_linear_clamp, uv + float2(0, -eps),   0);
+
+    float2 grad = float2(rx - lx, uy - dy) * 8.0;
+
+    float2 toClick   = (clickPos - worldPos);
+    float  distNorm  = length(toClick) / screenSize.x;
+    float2 directPull = normalize(toClick + 0.0001) * (1.0 - cx) * clamp(distNorm * 0.5, 0.0, 0.4);
+
+    return grad + directPull;
+}
+
+
+
+[numthreads(64, 1, 1)]
+void CSInit(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)particleCount) return;
+
+    float seed = float(i) * 1.234567 + 0.001;
+
+    float2 pos;
+    pos.x = hash(seed * 1.1) * screenSize.x;
+    pos.y = hash(seed * 2.3) * screenSize.y;
+
+    float angle = hash(seed * 3.7) * 6.28318;
+    float speed = hash(seed * 4.1) * 8.0 + 2.0;
+
+    particles[i].position    = pos;
+    particles[i].velocity    = float2(cos(angle), sin(angle)) * speed;
+    particles[i].life        = hash(seed * 5.9);
+    particles[i].mass        = 0.8 + hash(seed * 6.3) * 0.4;
+    particles[i].colorVariant = (int)(hash(seed * 7.7) * 4.0);
+    particles[i].pad         = 0;
+
+    float4 colors[4];
+    colors[0] = float4(0.86, 0.23, 0.31, 1.0); 
+    colors[1] = float4(1.00, 0.55, 0.63, 1.0); 
+    colors[2] = float4(1.00, 0.78, 0.39, 1.0); 
+    colors[3] = float4(0.90, 0.82, 0.86, 1.0); 
+
+    particles[i].color = colors[particles[i].colorVariant];
+}
+
+
+
+[numthreads(64, 1, 1)]
+void CSExplode(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)particleCount) return;
+
+    float2 pos      = particles[i].position;
+    float2 clickPt  = float2(clickX, clickY);
+    float2 diff     = pos - clickPt;
+    float  dist     = length(diff) + 1.0;
+    float  radius   = explosionRadius;
+
+    if (dist < radius)
+    {
+        float force = (radius - dist) / radius;
+        force = force * force * clickStrength;
+        particles[i].velocity += normalize(diff) * force;
+    }
+}
+
+
+
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)particleCount) return;
+
+    float2 pos  = particles[i].position;
+    float2 vel  = particles[i].velocity;
+    float  mass = particles[i].mass;
+
+    float2 curlForce  = curlNoise(pos, time) * chaosTemperature * 2.5;
+    float2 microNoise = curlNoise(pos * 3.0, time * 1.7 + 100.0) * chaosTemperature * 0.8;
+
+    float2 attractForce = sampleAttractor(pos) * attractorWeight * 9.0;
+
+    float2 diff2        = pos - mousePos;
+    float  dist2        = length(diff2);
+    float  mouseRadius  = 300.0;
+    float2 mouseForce   = float2(0, 0);
+
+    if (dist2 < mouseRadius && dist2 > 0.5)
+    {
+        float push = (mouseRadius - dist2) / mouseRadius;
+        push *= push;
+        float closeness = 1.0 + (1.0 - dist2 / mouseRadius) * 3.0;
+        mouseForce = normalize(diff2) * push * mouseSpeed * 25.0 * closeness;
+        float2 perp = float2(-diff2.y, diff2.x) / (dist2 + 0.001);
+        mouseForce += perp * push * mouseSpeed * 10.0 * closeness;
+    }
+
+    float2 totalForce = curlForce + microNoise + attractForce + mouseForce;
+    vel += totalForce * deltaTime * (1.0 / mass);
+
+    float2 uvPos  = (pos - clickPos) / screenSize + 0.5;
+    uvPos         = clamp(uvPos, 0.001, 0.999);
+    float onLetter = attractorTex.SampleLevel(sampler_linear_clamp, uvPos, 0);
+
+    float order          = 1.0 - chaosTemperature;
+    float stickyDamping  = lerp(0.980, 0.55, onLetter * order);  
+    vel *= stickyDamping;
+
+    float maxSpeed = lerp(4.0, 12.0, chaosTemperature);
+    float spd = length(vel);
+    if (spd > maxSpeed) vel = normalize(vel) * maxSpeed;
+
+    pos += vel * deltaTime * 20;
+
+    if (pos.x < -10)              pos.x += screenSize.x + 20;
+    if (pos.x > screenSize.x + 10) pos.x -= screenSize.x + 20;
+    if (pos.y < -10)              pos.y += screenSize.y + 20;
+    if (pos.y > screenSize.y + 10) pos.y -= screenSize.y + 20;
+
+    particles[i].position = pos;
+    particles[i].velocity = vel;
+    particles[i].life = frac(particles[i].life + deltaTime * 0.3);
+    
+}
+
+
+
+[numthreads(64, 1, 1)]
+void CSCountDensity(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint) particleCount)
+        return;
+
+    float2 uv = particles[i].position / screenSize;
+    uv = clamp(uv, 0.001, 0.999);
+    float texVal = densityTex.SampleLevel(sampler_linear_clamp, uv, 0);
+
+    if (texVal > 0.15) 
+        InterlockedAdd(densityCounter[0], 1);
+}
