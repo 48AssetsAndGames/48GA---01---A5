@@ -96,7 +96,6 @@ public class PhaseController : MonoBehaviour
         CurrentPhase = SimPhase.Exploding;
         phaseTimer = 0f;
         OnExplodeStarted?.Invoke();
-        Debug.Log($"[PhaseController] BOOM -> luego: {(CurrentTargetIsAmine ? "Amine" : "48")}");
     }
 
     void EnterConverging()

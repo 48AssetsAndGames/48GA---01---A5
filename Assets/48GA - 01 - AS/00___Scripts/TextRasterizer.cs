@@ -59,7 +59,6 @@ public class TextRasterizer : MonoBehaviour
         if (myparticleSystem != null)
             myparticleSystem.OnAttractorTexturesReady();
 
-        Debug.Log("[TextRasterizer] Texturas generadas!");
     }
 
     void OnGUI()

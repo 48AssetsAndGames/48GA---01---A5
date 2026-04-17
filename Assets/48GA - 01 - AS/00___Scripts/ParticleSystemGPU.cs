@@ -59,7 +59,6 @@ public class ParticleSystemGPU : MonoBehaviour
         int stride = sizeof(float) * 12;
         particleBuffer = new ComputeBuffer(particleCount, stride);
         buffersReady = true;
-        Debug.Log($"[ParticleSystemGPU] Buffer: {particleCount} particulas ({(particleCount * stride / 1024f / 1024f):F1} MB)");
     }
 
     void GetKernels()
@@ -78,13 +77,11 @@ public class ParticleSystemGPU : MonoBehaviour
         computeShader.SetInt("particleCount", particleCount);
         int threadGroups = Mathf.CeilToInt(particleCount / 64f);
         computeShader.Dispatch(kernelInit, threadGroups, 1, 1);
-        Debug.Log("[ParticleSystemGPU] Particulas inicializadas");
     }
 
     public void OnAttractorTexturesReady()
     {
         attractorReady = true;
-        Debug.Log("[ParticleSystemGPU] Texturas del atractor listas");
     }
 
     void Update()
@@ -166,7 +163,6 @@ public class ParticleSystemGPU : MonoBehaviour
             if (request.hasError || !buffersReady) return;
             int count = request.GetData<int>()[0];
             phaseController.WordDensity = Mathf.Clamp01(count / (particleCount * 0.08f));
-            Debug.Log($"[Density] {count} particulas en letra = {phaseController.WordDensity:F2}");
         });
     }
 
@@ -192,19 +188,17 @@ public class ParticleSystemGPU : MonoBehaviour
         computeShader.SetFloat("explosionRadius", explosionRadius);
         int threadGroups = Mathf.CeilToInt(particleCount / 64f);
         computeShader.Dispatch(kernelExplode, threadGroups, 1, 1);
-        Debug.Log($"[ParticleSystemGPU] Explosion en {clickWorldPos}");
     }
 
     void OnConvergingStarted(bool isAmine)
     {
         if (attractorField != null)
             attractorField.SetTarget(isAmine);
-        Debug.Log($"[ParticleSystemGPU] Convergiendo -> {(isAmine ? "Amine" : "48")}");
     }
 
     void OnCollapseStarted()
     {
-        Debug.Log("[ParticleSystemGPU] Colapso");
+
     }
 
     void OnCollapseExplode()
@@ -216,7 +210,6 @@ public class ParticleSystemGPU : MonoBehaviour
         computeShader.SetFloat("explosionRadius", explosionRadius * 4000.2f);
         int threadGroups = Mathf.CeilToInt(particleCount / 64f);
         computeShader.Dispatch(kernelExplode, threadGroups, 1, 1);
-        Debug.Log("[ParticleSystemGPU] BOOM real post-colapso");
     }
 
     void OnDestroy()
