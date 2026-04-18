@@ -194,7 +194,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float spd = length(vel);
     if (spd > maxSpeed) vel = normalize(vel) * maxSpeed;
 
-    pos += vel * deltaTime * 20;
+    pos += vel * deltaTime * 120;
 
     if (pos.x < -10)              pos.x += screenSize.x + 20;
     if (pos.x > screenSize.x + 10) pos.x -= screenSize.x + 20;
