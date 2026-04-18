@@ -660,9 +660,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5d0cb4cb8320774b80e9b7d81394ce0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  explodeDuration: 4.6
+  explodeDuration: 0.5
   convergingDuration: 14
-  collapsingDuration: 1.5
+  collapsingDuration: 3
   attractorCurve:
     serializedVersion: 2
     m_Curve:
@@ -730,8 +730,8 @@ MonoBehaviour:
   attractorField: {fileID: 942725186}
   basePointSize: 0.5
   glowIntensity: 0.2
-  explosionStrength: 300
-  explosionRadius: 200
+  explosionStrength: 1800
+  explosionRadius: 800
 --- !u!4 &942725189
 Transform:
   m_ObjectHideFlags: 0
